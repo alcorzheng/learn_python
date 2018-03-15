@@ -5,7 +5,9 @@
 # desc:
 
 from Lottery.lottery.util import DBUtil
-from Lottery.lottery.getData import GetData_DLT
+from Lottery.lottery.util import BaseUtil
+from Lottery.lottery.spider import SSQSpider
+from Lottery.lottery.spider import DLTSpider
 
 if __name__ == "__main__":
-    print(DBUtil.getJDBCURL())
+    DLTSpider.insDLTData()
