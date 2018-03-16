@@ -6,9 +6,7 @@
 
 import psycopg2
 from bs4 import BeautifulSoup
-from ..util import HTMLUtil
-from ..util import DBUtil
-from ..util import BaseUtil
+from Lottery.lottery.util import HTMLUtil,DBUtil,BaseUtil
 
 # 获取url总页数
 def getPageNum(url,headers):
