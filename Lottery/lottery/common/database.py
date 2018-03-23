@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Boolean, Text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import and_
 
-from common import envparam
+from Lottery.lottery.common import envparam
 
 class CommonDBExecutor(object):
 
@@ -96,7 +96,6 @@ class CommonDBExecutor(object):
             ret = self.session.query(self.tb).update(update_dict)
 
         self.session.commit()
-
         return ret
 
     def delete(self, **kwargs):
@@ -110,7 +109,6 @@ class CommonDBExecutor(object):
                 ret = self.session.query(self.tb).filter(*new_filter_list).delete()
         else:
             ret = self.session.query(self.tb).delete()
-
         self.session.commit()
         return ret
 

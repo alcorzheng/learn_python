@@ -5,7 +5,7 @@
 # desc: 双色球开奖结果爬取
 
 from bs4 import BeautifulSoup
-from common import utils_html, utils, envparam, database, model_spider
+from Lottery.lottery.common import utils_html, utils, database, model_spider
 
 
 # 获取url总页数

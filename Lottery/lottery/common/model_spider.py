@@ -7,7 +7,7 @@
 from sqlalchemy import Column, Integer, String, Date, Numeric
 from sqlalchemy.ext.declarative import declarative_base
 
-from common import utils
+from Lottery.lottery.common import utils
 
 # 创建对象的基类:
 Base = declarative_base()
