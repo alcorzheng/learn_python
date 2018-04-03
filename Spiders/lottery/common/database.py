@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Boolean, Text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import and_
 
-from Lottery.lottery.common import envparam
+from Spiders.lottery.common import envparam
 
 class CommonDBExecutor(object):
 

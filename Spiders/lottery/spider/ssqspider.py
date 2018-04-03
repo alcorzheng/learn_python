@@ -5,7 +5,7 @@
 # desc: 双色球开奖结果爬取
 
 from bs4 import BeautifulSoup
-from Lottery.lottery.common import utils_html, utils, database, model_spider
+from Spiders.lottery.common import utils_html, utils, database, model_spider
 
 
 # 获取url总页数
@@ -51,6 +51,7 @@ def insSSQData():
         if len(ssqDatas) == 0:
             print("【双色球】未爬取到符合条件数据！")
             break
-        print("【双色球】本次爬取到%s条符合条件数据！" % (len(ssqDatas)))
+        else:
+            print("【双色球】本次爬取到%s条符合条件数据！" % (len(ssqDatas)))
         # 插入数据库
         conn.insert_by_batch(ssqDatas)
