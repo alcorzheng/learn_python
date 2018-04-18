@@ -5,11 +5,12 @@
 # desc: 双色球开奖结果爬取
 
 from bs4 import BeautifulSoup
-from Spiders.lottery.common import utils_html, utils, database, model_spider
+from Spiders.spiders.lottery.lottery_model import LotteryCNSSQ
+from Spiders.common import config, database, utils, utils_html
 
 
-# 获取url总页数
-def getPageNum(url, headers):
+def get_page_num(url, headers):
+    """获取url总页数"""
     soup = BeautifulSoup(utils_html.getPage(url, headers).content, 'lxml')
     pagenums = soup.select('body > table > tr > td > p.pg > strong:nth-of-type(1)')
     if len(pagenums) > 0:
@@ -18,13 +19,13 @@ def getPageNum(url, headers):
         return 0
 
 
-def insSSQData():
+def ins_data_ssq():
     """爬取双色球开奖信息并插入数据库"""
     # 获取上次爬取的最大ID
-    conn = database.CommonDBExecutor(database.getDefDBURL(), model_spider.lottery_cn_ssq)
-    results = conn.query('select max(id_) max_id from data_analysis.lottery_cn_ssq')
+    conn = database.CommonDBExecutor(config.get_database_url(), LotteryCNSSQ)
+    results = conn.querybysqlstr(r'''select max(id_) max_id from data_analysis.lottery_cn_ssq''')
     end_id = utils.obj2int(results[0]['max_id'])
-    for list_num in range(1, getPageNum(utils_html.getSSQURL(1), utils_html.getHeaders())):  # 从第一页到第getPageNum(url)页
+    for list_num in range(1, get_page_num(utils_html.getSSQURL(1), utils_html.getHeaders())):  # 从第一页到第getPageNum(url)页
         url = utils_html.getSSQURL(list_num)
         soup = BeautifulSoup(utils_html.getPage(url, utils_html.getHeaders()).content, 'lxml')
         list_date_ = soup.select('body > table > tr > td:nth-of-type(1)')
@@ -33,7 +34,7 @@ def insSSQData():
         list_amount_ = soup.select('body > table > tr > td:nth-of-type(4) > strong')
         list_prize_first = soup.select('body > table > tr > td:nth-of-type(5) > strong')
         list_prize_second = soup.select('body > table > tr > td:nth-of-type(6) > strong')
-        ssqDatas = []
+        ssqdatas = []
         for date_, id_, win_nums, amount_, prize_first, prize_second in zip(list_date_, list_id_, list_win_nums,
                                                                             list_amount_, list_prize_first,
                                                                             list_prize_second):
@@ -47,11 +48,11 @@ def insSSQData():
                 'prize_first': utils.obj2int(prize_first.get_text().replace(',', '').strip()),
                 'prize_second': utils.obj2int(prize_second.get_text().replace(',', '').strip())
             }
-            ssqDatas.append(data)
-        if len(ssqDatas) == 0:
+            ssqdatas.append(data)
+        if len(ssqdatas) == 0:
             print("【双色球】未爬取到符合条件数据！")
             break
         else:
-            print("【双色球】本次爬取到%s条符合条件数据！" % (len(ssqDatas)))
+            print("【双色球】本次爬取到%s条符合条件数据！" % (len(ssqdatas)))
         # 插入数据库
-        conn.insert_by_batch(ssqDatas)
+        conn.insert_by_batch(ssqdatas)

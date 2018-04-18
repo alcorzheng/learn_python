@@ -5,11 +5,12 @@
 # desc: 大乐透开奖结果爬取
 
 from bs4 import BeautifulSoup
-from Spiders.lottery.common import utils_html, utils, database, model_spider
+from Spiders.spiders.lottery import lottery_model
+from Spiders.common import config, database, utils, utils_html
 
 
-# 获取url总页数
-def getPageNum(url, headers):
+def get_page_num(url, headers):
+    """获取url总页数"""
     soup = BeautifulSoup(utils_html.getPage(url, headers).content, 'lxml')
     pagenums = soup.select('body > div.yyl > div.yylMain > div.result > div > div > select > option')
     if len(pagenums) > 0:
@@ -17,18 +18,18 @@ def getPageNum(url, headers):
     else:
         return 0
 
-# 爬取大乐透开奖信息并插入数据库
-def insDLTData():
+
+def ins_data_dlt():
     """爬取双色球开奖信息并插入数据库"""
     # 获取上次爬取的最大ID
-    conn = database.CommonDBExecutor(database.getDefDBURL(), model_spider.lottery_cn_dlt)
-    results = conn.query('select max(id_) max_id from data_analysis.lottery_cn_dlt')
+    conn = database.CommonDBExecutor(config.get_database_url(), lottery_model.LotteryCNDLT)
+    results = conn.querybysqlstr('select max(id_) max_id from data_analysis.lottery_cn_dlt')
     end_id = utils.obj2int(results[0]['max_id'])
-    for list_num in range(1, getPageNum(utils_html.getDLTURL(1), utils_html.getHeaders())):  # 从第一页到第getPageNum(url)页
+    for list_num in range(1, get_page_num(utils_html.getDLTURL(1), utils_html.getHeaders())):  # 从第一页到第getPageNum(url)页
         url = utils_html.getDLTURL(list_num)
         soup = BeautifulSoup(utils_html.getPage(url, utils_html.getHeaders()).content, 'lxml')
         list_dlt = soup.select('body > div.yyl > div.yylMain > div.result > table > tbody > tr')
-        dltDatas = []
+        dltdatas = []
         for dlt in list_dlt:
             if int(dlt.select('td:nth-of-type(1)')[0].get_text().replace(',', '')) <= int(end_id):
                 break
@@ -41,11 +42,11 @@ def insDLTData():
                 'prize_first': utils.obj2int(dlt.select('td:nth-of-type(9)')[0].get_text().replace(',', '').strip()),
                 'prize_second': utils.obj2int(dlt.select('td:nth-of-type(13)')[0].get_text().replace(',', '').strip())
             }
-            dltDatas.append(data)
-        if len(dltDatas) == 0:
+            dltdatas.append(data)
+        if len(dltdatas) == 0:
             print("【大乐透】未爬取到符合条件数据！")
             break
         else:
-            print("【大乐透】本次爬取到%s条符合条件数据！" % (len(dltDatas)))
+            print("【大乐透】本次爬取到%s条符合条件数据！" % (len(dltdatas)))
         # 插入数据库
-        conn.insert_by_batch(dltDatas)
+        conn.insert_by_batch(dltdatas)

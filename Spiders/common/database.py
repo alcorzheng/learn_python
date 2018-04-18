@@ -2,23 +2,22 @@
 # -*- coding:utf-8 -*-
 # auth: alcorzheng<alcor.zheng@gmail.com>
 # date: 2018-03-22
-# desc: 
+# desc: 数据库工具
 
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Text
+from sqlalchemy import create_engine, and_
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import and_
+from Spiders.common import config
 
-from Spiders.lottery.common import envparam
 
 class CommonDBExecutor(object):
 
     def __init__(self, db_url, table=None):
         """初始化"""
         if db_url is None:
-            db_url = getDefDBURL()
+            db_url = config.get_database_url()
         self.db = create_engine(db_url, pool_size=100, max_overflow=200, pool_recycle=3600, encoding='utf8')
-        DBSession = sessionmaker(bind=self.db)
-        self.session = DBSession()
+        dbsession = sessionmaker(bind=self.db)
+        self.session = dbsession()
         if table:
             self.tb = table
         else:
@@ -46,10 +45,10 @@ class CommonDBExecutor(object):
             filter_expression = None
             if len(key) > 4 and "not_" == key[0:4]:
                 class_key = getattr(self.tb, key[4:])
-                filter_expression = class_key!=val
+                filter_expression = class_key != val
             else:
                 class_key = getattr(self.tb, key)
-                filter_expression = class_key==val
+                filter_expression = class_key == val
             new_filter_list.append(filter_expression)
         return new_filter_list
 
@@ -71,14 +70,14 @@ class CommonDBExecutor(object):
             ret = data.to_dict()
         return ret
 
-    def query(self, sqlstrs, params=None):
+    def querybysqlstr(self, sqlstrs, params=None):
         """自定义SQL查询"""
         ret = []
         data = None
         if params:
-            data = self.session.execute(sqlstrs, params)
+            data = self.db.execute(sqlstrs, params)
         else:
-            data = self.session.execute(sqlstrs)
+            data = self.db.execute(sqlstrs, {})
         for row in data:
             ret.append(row)
         return ret
@@ -111,13 +110,3 @@ class CommonDBExecutor(object):
             ret = self.session.query(self.tb).delete()
         self.session.commit()
         return ret
-
-def getDefDBURL():
-    """获取默认数据库链接"""
-    return envparam.getVal("DB_URL") % (envparam.getVal("DB_TYPE"),
-                                        envparam.getVal("DB_USER"),
-                                        envparam.getVal("DB_PASS"),
-                                        envparam.getVal("DB_HOST"),
-                                        envparam.getVal("DB_PORT"),
-                                        envparam.getVal("DB_NAME")
-                                        )

@@ -4,12 +4,10 @@
 # date:
 # desc:
 
-from Spiders.lottery.common import envparam
-from Spiders.lottery.spider import ssqspider, dltspider
+from Learn_pkgs.learn.BeautifulSoup import spider_ssq
 
 if __name__ == "__main__":
     print("-----开始-----")
-    envparam._init_()
-    ssqspider.insSSQData()
-    dltspider.insDLTData()
+    spider_ssq.ins_data_ssq()
+#    spider_dlt.ins_data_dlt()
     print("-----结束-----")
