@@ -4,7 +4,7 @@
 @auth: alcorzheng<alcor.zheng@gmail.com>
 @file: datamodels.py
 @time: 2018/4/1816:42
-@desc: 爬取赛思BI中的数据模型定义
+@desc: 赛思BI数据模型（事实表维表）爬取工具，支持下钻目录
 @func: 
 """
 
@@ -12,109 +12,148 @@ from requests_html import HTMLSession
 import xlsxwriter
 
 
-session = HTMLSession()
-szbi_host = "http://172.16.4.242"
-szbi_srvname = "bidevp"
-szbi_user = "zhengx"
-szbi_password = "top@1018"
-szbi_projectname = "TOPSYJDSJFX"
-szbi_customurl = "FACT"
+class SpiderConf:
+    szbi_host = "http://172.16.4.242"
+    szbi_srvname = "bidevp"
+    szbi_user = "zhengx"
+    szbi_password = "top@1018"
+    szbi_projectname = "TOPSYJDSJFX"
+    szbi_customurl = "FACT"
+    out_filepath = r'E:\湖北数据处理中心\98.个人目录\郑雄\食药大数据\ '
+    out_factexeclname = '事实表模型整理.xls'
+    out_dimexeclname = '维表模型整理.xls'
 
 
-def spider_modellist(page_url, drilllevel, dmexecl):
-    """"爬取事实表维表清单"""
-    ml_response = session.get(page_url)
-    ml_content = ml_response.html.find('div.sz-commons-simplelist-content', first=True)
-    md_list = ml_content.find('tr.sz-commons-simplelist-tr')
-    for md in md_list:
-        md_url = md.find('td:nth-of-type(2)', first=True).find('a', first=True).attrs['href']
-        md_name = md.find('td:nth-of-type(2)', first=True).text.strip()
-        md_code = md.find('td:nth-of-type(3)', first=True).text.strip()
-        md_code = md_code[:md_code.index('\n')]
-        md_type = md.find('td:nth-of-type(4)', first=True).text.strip()
-        if md_type == '目录' and drilllevel != 0:
-            spider_modellist(szbi_host + md_url, drilllevel-1, dmexecl)
-        elif md_type == '事实表':
-            spider_factcontent(md_code, md_name, szbi_host + md_url, dmexecl)
-        elif md_type == '维表':
-            spider_dimcontent(md_code, md_name, szbi_host + md_url, dmexecl)
+class SpiderBIDM:
+    def __init__(self, session):
+        self.session = session
+        self.factexecl = None
+        self.dimexecl = None
+
+    def spider_model(self, page_url, drilllevel):
+        """"爬取事实表维表清单"""
+        ml_response = self.session.get(page_url)
+        ml_content = ml_response.html.find('div.sz-commons-simplelist-content', first=True)
+        md_list = ml_content.find('tr.sz-commons-simplelist-tr')
+        for md in md_list:
+            md_url = md.find('td:nth-of-type(2)', first=True).find('a', first=True).attrs['href']
+            md_name = md.find('td:nth-of-type(2)', first=True).text.strip()
+            md_code = md.find('td:nth-of-type(3)', first=True).text.strip()
+            md_code = md_code[:md_code.index('\n')]
+            md_type = md.find('td:nth-of-type(4)', first=True).text.strip()
+            if md_type == '目录' and drilllevel != 0:
+                self.spider_model(SpiderConf.szbi_host + md_url, drilllevel - 1)
+            elif md_type == '事实表':
+                self.spider_factcontent(md_code, md_name, SpiderConf.szbi_host + md_url)
+            elif md_type == '维表':
+                self.spider_dimcontent(md_code, md_name, SpiderConf.szbi_host + md_url)
+            else:
+                pass
+        if self.factexecl is not None:
+            self.factexecl.close()
+        if self.dimexecl is not None:
+            self.dimexecl.close()
+
+    def spider_mdproperties(self, properties_url):
+        """爬取事实表维表对应的物理表名称"""
+        mdp_response = self.session.get(properties_url)
+        properties = dict()
+        properties['tblname'] = mdp_response.html.find('input#dbtable-resinput', first=True).attrs['value']
+        tblname_path = mdp_response.html.find('input#dbtable-resinput', first=True).attrs['title']
+        tblname_path = tblname_path[tblname_path.index('/') + 1:]
+        tblname_path = tblname_path[:tblname_path.index('/')] + ':' + tblname_path[tblname_path.index('/') + 1:]
+        properties['tblname_path'] = tblname_path
+        properties['tblname_full'] = properties['tblname'] + '(' + properties['tblname_path'] + ')'
+        return properties
+
+    def spider_dimcontent(self, dim_code, dim_name, dim_url):
+        """爬取维表内容"""
+        if self.factexecl is None:
+            self.factexecl = DMExecl(SpiderConf.out_filepath.strip() + SpiderConf.out_dimexeclname.strip(), 'FACT')
+        print("")
+
+    def spider_factcontent(self, fact_code, fact_name, fact_url):
+        """"爬取事实表内容"""
+        if self.dimexecl is None:
+            self.dimexecl = DMExecl(SpiderConf.out_filepath.strip() + SpiderConf.out_factexeclname.strip(), 'DIM')
+        fact_response = self.session.get(fact_url)
+        fact_content = fact_response.html.find('div.sz-commons-simplelist-content', first=True)
+        properties_path = fact_response.html.find('li#properties', first=True).find('a', first=True).attrs['href']
+        fact_properties = self.spider_mdproperties(self.get_url(properties_path))
+        column_list = fact_content.find('tr.sz-commons-simplelist-tr')
+        dmsheet = DMSheet(self.factexecl, 'FACT', fact_name, fact_code, fact_properties)
+        for column in column_list:
+            code_ = column.find('td:nth-of-type(2)', first=True).text.strip()
+            name_ = column.find('td:nth-of-type(3)', first=True).text.strip()
+            type_bdim = ''
+            type_bmeasure = ''
+            if column.find('span.sz-bi-dw-icons-dim', first=True) is not None:
+                type_bdim = '√'
+            elif column.find('span.sz-bi-dw-icons-vdim', first=True) is not None:
+                type_bdim = '虚拟'
+            if column.find('span.sz-bi-dw-icons-measure', first=True) is not None:
+                type_bmeasure = '√'
+            elif column.find('span.sz-bi-dw-icons-vmeasure', first=True) is not None:
+                type_bmeasure = '虚拟'
+            filed_ = column.find('td:nth-of-type(4)', first=True).text.strip()
+            dbtype_ = column.find('td:nth-of-type(6)', first=True).text.strip()
+            dim_obj = column.find('td:nth-of-type(8)', first=True).find('a', first=True)
+            dim_name = dim_obj.text.strip() if dim_obj is not None else ''
+            dim_path = dim_obj.attrs['path'] if dim_obj is not None else ''
+            dim_url = self.get_url(dim_obj.attrs['href']) if dim_obj is not None else ''
+            dmsheet.writecontent(code_,
+                                 name_,
+                                 filed_,
+                                 dbtype_,
+                                 type_bdim,
+                                 type_bmeasure,
+                                 dim_name,
+                                 [dim_path, dim_url],
+                                 ''
+                                 )
+        self.factexecl.addindexsheet('',
+                                     [fact_name, "internal:'" + fact_name + "'!A1"],
+                                     [self.get_biurl(fact_url[fact_url.find('/datamodels'):]), fact_url],
+                                     fact_properties['tblname'],
+                                     fact_properties['tblname_path'],
+                                     '')
+
+    @staticmethod
+    def get_url(path):
+        return SpiderConf.szbi_host + path
+
+    @staticmethod
+    def get_biurl(path):
+        return SpiderConf.szbi_projectname + ':' + path
+
+    @staticmethod
+    def get_szbimodelurl():
+        """获取赛思BI模型界面URL"""
+        mdurl = SpiderConf.szbi_host
+        mdurl = mdurl + '/' + SpiderConf.szbi_srvname
+        mdurl = mdurl + '/meta/' + SpiderConf.szbi_projectname
+        mdurl = mdurl + '/datamodels'
+        if SpiderConf.szbi_customurl is not None:
+            mdurl = mdurl + '/' + SpiderConf.szbi_customurl
+        mdverifyurlparam = 'user=' + SpiderConf.szbi_user + '&password=' + SpiderConf.szbi_password
+        if SpiderConf.szbi_customurl is not None and SpiderConf.szbi_customurl.find('?') >= 0:
+            mdurl = mdurl + '&' + mdverifyurlparam
         else:
-            pass
-
-
-def spider_dimcontent(dim_code, dim_name, dim_url, dmexecl):
-    """爬取维表内容"""
-
-
-def spider_factcontent(fact_code, fact_name, fact_url, dmexecl):
-    """"爬取事实表内容"""
-    fact_response = session.get(fact_url)
-    fact_content = fact_response.html.find('div.sz-commons-simplelist-content', first=True)
-    properties_url = szbi_host + fact_response.html.find('li#properties', first=True).find('a', first=True).attrs['href']
-    fact_properties = spider_mdproperties(properties_url)
-    column_list = fact_content.find('tr.sz-commons-simplelist-tr')
-    dmsheet = DMSheet(dmexecl, 'FACT', fact_name, fact_code, fact_properties)
-    for column in column_list:
-        code_ = column.find('td:nth-of-type(2)', first=True).text.strip()
-        name_ = column.find('td:nth-of-type(3)', first=True).text.strip()
-        type_bdim = ''
-        type_bmeasure = ''
-        if column.find('span.sz-bi-dw-icons-dim', first=True) is not None:
-            type_bdim = '√'
-        elif column.find('span.sz-bi-dw-icons-vdim', first=True) is not None:
-            type_bdim = '虚拟'
-        if column.find('span.sz-bi-dw-icons-measure', first=True) is not None:
-            type_bmeasure = '√'
-        elif column.find('span.sz-bi-dw-icons-vmeasure', first=True) is not None:
-            type_bmeasure = '虚拟'
-        filed_ = column.find('td:nth-of-type(4)', first=True).text.strip()
-        dbtype_ = column.find('td:nth-of-type(6)', first=True).text.strip()
-        dim_obj = column.find('td:nth-of-type(8)', first=True).find('a', first=True)
-        dim_name = dim_obj.text.strip() if dim_obj is not None else ''
-        dim_path = dim_obj.attrs['path'] if dim_obj is not None else ''
-        dim_url = szbi_host + dim_obj.attrs['href'] if dim_obj is not None else ''
-        dmsheet.writecontent(code_,
-                             name_,
-                             filed_,
-                             dbtype_,
-                             type_bdim,
-                             type_bmeasure,
-                             dim_name,
-                             [dim_path, dim_url],
-                             ''
-                             )
-    dmexecl.addindexsheet('',
-                          [fact_name, "internal:'" + fact_name + "'!A1"],
-                          [szbi_projectname + ':' + fact_url[fact_url.index('/datamodels'):], fact_url],
-                          fact_properties['tblname'],
-                          fact_properties['tblname_path'],
-                          '')
-
-
-def spider_mdproperties(properties_url):
-    """爬取事实表维表对应的物理表名称"""
-    mdp_response = session.get(properties_url)
-    properties = dict()
-    properties['tblname'] = mdp_response.html.find('input#dbtable-resinput', first=True).attrs['value']
-    properties['tblname_path'] = mdp_response.html.find('input#dbtable-resinput', first=True).attrs['title']
-    properties['tblname_full'] = properties['tblname'] + '(' + properties['tblname_path'] + ')'
-    return properties
-
-
-def get_szbimodelurl():
-    """获取赛思BI模型界面URL"""
-    return szbi_host + '/' + szbi_srvname \
-          + '/meta/' + szbi_projectname \
-          + '/datamodels/' + szbi_customurl\
-          + '?user=' + szbi_user + '&password=' + szbi_password
+            mdurl = mdurl + '?' + mdverifyurlparam
+        return mdurl
 
 
 class DMExecl:
     """模型Execl页对象"""
-    def __init__(self, filepath):
+    def __init__(self, filepath, execltype):
         self.filepath = filepath
+        self.execltype = execltype
         self.execlbook = xlsxwriter.Workbook(filepath)
         self.content_rowidx = 0
+        if execltype == 'FACT':
+            self.__init_factexecl__()
+
+    def __init_factexecl__(self):
         # 定义样式表
         self.style_title_center = self.execlbook.add_format(
             {'bold': True, 'border': 1, 'align': 'center', 'font_size': 12})
@@ -130,9 +169,12 @@ class DMExecl:
             {'border': 1, 'align': 'right', 'font_size': 11})
         # 创建主页面
         self.indexsheet = self.execlbook.add_worksheet('事实表汇总')
-        self.__init_indexsheet__()
+        self.__init_factindexsheet__()
 
-    def __init_indexsheet__(self):
+    def __init_dimexecl__(self):
+        self.__init_factindexsheet__()
+
+    def __init_factindexsheet__(self):
         self.indexsheet.set_column(0, 0, 15, self.style_content_left)
         self.indexsheet.set_column(1, 1, 20, self.style_content_left)
         self.indexsheet.set_column(2, 2, 45, self.style_content_left)
@@ -239,8 +281,5 @@ class DMSheet:
 
 
 if __name__ == '__main__':
-    url = get_szbimodelurl()
-    dmexecl = DMExecl(r'e:\事实表模型整理.xls')
-    spider_modellist(url, 0, dmexecl)
-    dmexecl.close()
-
+    spiderdm = SpiderBIDM(HTMLSession())
+    spiderdm.spider_model(spiderdm.get_szbimodelurl(), 0)
